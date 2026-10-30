@@ -59,38 +59,49 @@ class Chrome:
         pages = [pg for pg in self.context.pages if part in pg.url]
         return pages[-1] if pages else None
 
-    def tab_urls(self) -> list[str]:
-        """ページに接続せずに、開いているタブの URL を取得する。"""
+    def tab_states(self) -> list[tuple[str, str]]:
+        """ページに接続せずに、開いているタブの (URL, タイトル) を取得する。"""
         with urllib.request.urlopen(f"{self.cdp_url}/json/list", timeout=5) as r:
-            return [t["url"] for t in json.load(r) if t.get("type") == "page"]
+            return [(t["url"], t["title"]) for t in json.load(r) if t.get("type") == "page"]
 
-    def pass_turnstile(self, timeout_sec: int, done_part: str) -> bool:
-        """Turnstile を人に通過してもらう。
+    def passed_page(self, done: str) -> Page | None:
+        page = self.find_page(done)
+        if page is None:
+            return None
+        try:
+            page.wait_for_load_state("domcontentloaded")
+            return None if is_captcha_page(page) else page
+        except Exception:
+            return None  # 画面遷移の途中
 
-        接続したままだと Turnstile の判定に失敗するため、CDP 接続なら通過するまで切断し、
-        タブの URL だけを見て待つ。
+    def pass_turnstile(self, timeout_sec: int, done: str) -> Page | None:
+        """Turnstile を人に通過してもらい、通過後の画面（URL に done を含むタブ）を返す。
+
+        接続したままだと Turnstile の判定に失敗するため、CDP 接続なら切断し、タブの URL と
+        タイトルだけを見て待つ。変化したら接続して画面を確かめ、まだ Turnstile なら待ち直す。
         """
+        # 判定だけで自動的に通過している場合
+        page = self.passed_page(done)
+        if page is not None:
+            return page
         print("\a")
         notify("【ITS】ブラウザで「確認」にチェックして「次へ」を押してください")
-        if not self.cdp_url:
-            page = self.context.pages[-1]
-            deadline = time.monotonic() + timeout_sec
-            while time.monotonic() < deadline:
-                if not is_captcha_page(page):
-                    return True
-                page.wait_for_timeout(1000)
-            return False
-        self.browser.close()  # CDP 接続を切るだけで、Chrome とタブはそのまま残る
         deadline = time.monotonic() + timeout_sec
-        try:
-            while time.monotonic() < deadline:
+        while time.monotonic() < deadline:
+            if self.cdp_url:
+                before = self.tab_states()
+                self.browser.close()  # CDP 接続を切るだけで、Chrome とタブはそのまま残る
+                try:
+                    while time.monotonic() < deadline and self.tab_states() == before:
+                        time.sleep(2)
+                finally:
+                    self.connect()
+            else:
                 time.sleep(2)
-                urls = self.tab_urls()
-                if any(done_part in u for u in urls) and not any("capture_check" in u for u in urls):
-                    return True
-            return False
-        finally:
-            self.connect()
+            page = self.passed_page(done)
+            if page is not None:
+                return page
+        return None
 
 
 def open_calendar(chrome: Chrome, cfg: dict) -> Page | None:
@@ -101,13 +112,13 @@ def open_calendar(chrome: Chrome, cfg: dict) -> Page | None:
     """
     page = chrome.context.new_page()
     if cfg.get("entry", "public") == "public":
-        return open_calendar_public(page, cfg.get("public_url", DEFAULT_PUBLIC_URL))
+        return open_calendar_public(chrome, page, cfg.get("public_url", DEFAULT_PUBLIC_URL), cfg["captcha_timeout_sec"])
     page.goto(empty_apply_url(cfg["entry_apply_id"]))
     if is_captcha_page(page):
-        if not chrome.pass_turnstile(cfg["captcha_timeout_sec"], "/apply/empty_new"):
+        page = chrome.pass_turnstile(cfg["captcha_timeout_sec"], "/apply/empty_new")
+        if page is None:
             notify("【ITS】Turnstile 待ちがタイムアウトしました")
             return None
-        page = chrome.find_page("/apply/empty_new")
     page.wait_for_load_state("networkidle")
     with page.context.expect_page() as popup:
         page.click("#showStatus")
@@ -116,7 +127,7 @@ def open_calendar(chrome: Chrome, cfg: dict) -> Page | None:
     return cal
 
 
-def open_calendar_public(page: Page, url: str) -> Page | None:
+def open_calendar_public(chrome: Chrome, page: Page, url: str, timeout_sec: int) -> Page | None:
     """施設紹介ページに埋め込まれた予約システムの画面で「空き状況確認」を押す。"""
     page.goto(url)
     frame = page.frame_locator("#iframe_reserve")
@@ -135,8 +146,15 @@ def open_calendar_public(page: Page, url: str) -> Page | None:
             return None
         cal = page.context.new_page()
         cal.goto(frames[0].url)
-    cal.wait_for_load_state("networkidle")
-    if cal.locator("#top_tabs").count() == 0:
+    cal.wait_for_load_state("domcontentloaded")
+    if is_captcha_page(cal):
+        cal = chrome.pass_turnstile(timeout_sec, "/apply/calendar")
+        if cal is None:
+            notify("【ITS】Turnstile 待ちがタイムアウトしました")
+            return None
+    try:
+        cal.locator("#top_tabs").wait_for(timeout=20000)
+    except Exception:
         print(f"カレンダー画面ではありません: {cal.url}")
         save_capture(cal, "public_entry_failed")
         return None
@@ -160,10 +178,10 @@ def reserve(chrome: Chrome, ids: dict[str, str], found: list[Vacancy], config: d
             return False
         page = open_apply_page(cal, ids[v.facility], v.day, search["nights"], wait_ms)
         if is_captcha_page(page):
-            if not chrome.pass_turnstile(watch_cfg["captcha_timeout_sec"], "/apply/empty_new"):
+            page = chrome.pass_turnstile(watch_cfg["captcha_timeout_sec"], "/apply/empty_new")
+            if page is None:
                 notify("【ITS】Turnstile 待ちがタイムアウトしました")
                 return False
-            page = chrome.find_page("/apply/empty_new")
         page.wait_for_load_state("networkidle")
         room = search_rooms(page, v, search["nights"], search["persons"])
         if room is None:
