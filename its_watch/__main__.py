@@ -246,6 +246,7 @@ def main() -> int:
         for i in range(watch_cfg["max_rounds"]):
             if i:
                 time.sleep(interval)
+                print(f"{dt.datetime.now():%H:%M:%S} 確認 {i + 1}/{watch_cfg['max_rounds']} 回目")
                 # 前の回に開いたカレンダー関係のタブを閉じる（申込画面は残す）
                 for pg in chrome.context.pages:
                     if any(k in pg.url for k in ("/apply/calendar", "/apply/empty_calendar", "its-kenpo.or.jp/shisetsu/")):
@@ -257,7 +258,7 @@ def main() -> int:
             found = search_all(cal, facilities, search, wait_ms)
             if i == 0:
                 save_capture(cal, "calendar")
-            print(f"{dt.datetime.now():%H:%M:%S} 条件に合う空き {len(found)} 件")
+            print(f"{dt.datetime.now():%H:%M:%S} 条件に合う空き {len(found)} 件（{', '.join(facilities)}）")
             for v in found:
                 print(f"  {v}")
             message = "【ITS】空き状況（○空き △残りわずか）\n" + "\n".join(map(str, found)) if found else None
@@ -268,6 +269,9 @@ def main() -> int:
             if found and config["reserve"]["mode"] != "off":
                 if reserve(chrome, facility_ids(cal), found, config):
                     break
+            if i + 1 < watch_cfg["max_rounds"]:
+                next_at = dt.datetime.now() + dt.timedelta(seconds=interval)
+                print(f"次の確認は {next_at:%H:%M:%S} です（Ctrl+C で終了）")
     return 0
 
 
