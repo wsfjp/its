@@ -208,6 +208,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(prog="python -m its_watch")
     ap.add_argument("--config", default="config.toml")
     ap.add_argument("--test-line", action="store_true", help="LINE 通知のテストだけ行う")
+    ap.add_argument("--save", action="store_true", help="カレンダー画面を captures/ に保存する")
     args = ap.parse_args()
 
     # Windows のコンソール（cp932）でも文字化けせず、Git Bash でも即時に表示されるようにする
@@ -256,7 +257,7 @@ def main() -> int:
             if cal is None:
                 return 1
             found = search_all(cal, facilities, search, wait_ms)
-            if i == 0:
+            if i == 0 and args.save:
                 save_capture(cal, "calendar")
             print(f"{dt.datetime.now():%H:%M:%S} 条件に合う空き {len(found)} 件（{', '.join(facilities)}）")
             for v in found:
@@ -276,4 +277,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        print("\n中断しました")
+        sys.exit(130)
