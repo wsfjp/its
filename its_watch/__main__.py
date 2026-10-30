@@ -13,6 +13,7 @@ from playwright.sync_api import Page, sync_playwright
 
 from .line import load_dotenv, notify
 from .sitecodec import empty_apply_url
+from .vacancy import fmt, new_matches
 
 CAPTURE_DIR = pathlib.Path("captures")
 MIN_RELOAD_SEC = 180
@@ -43,6 +44,14 @@ def wait_for_human(page: Page, timeout_sec: int, facility: str) -> bool:
     return False
 
 
+def check(page: Page, facility: dict) -> None:
+    found, fresh = new_matches(page, facility)
+    print(f"{dt.datetime.now():%H:%M:%S} 条件に合う空き {len(found)} 日: {' '.join(map(fmt, found)) or 'なし'}")
+    if fresh:
+        url = empty_apply_url(facility["apply_id"])
+        notify(f"【ITS】{facility['name']} に空きが出ました\n{chr(10).join(map(fmt, fresh))}\n{url}")
+
+
 def watch(page: Page, facility: dict, cfg: dict) -> None:
     name = facility["name"]
     url = empty_apply_url(facility["apply_id"])
@@ -55,6 +64,7 @@ def watch(page: Page, facility: dict, cfg: dict) -> None:
     page.wait_for_load_state("networkidle")
     passed_at = time.monotonic()
     save_capture(page, f"{facility['apply_id']}_00")
+    check(page, facility)
 
     # 同じセッションでどれだけ再照会できるかを計測する
     interval = max(cfg["reload_interval_sec"], MIN_RELOAD_SEC)
@@ -67,8 +77,8 @@ def watch(page: Page, facility: dict, cfg: dict) -> None:
             notify(f"【ITS】{name}: 通過から {elapsed} 秒後の {i} 回目の再読み込みで Turnstile に戻りました")
             save_capture(page, f"{facility['apply_id']}_{i:02d}_captcha")
             return
-        save_capture(page, f"{facility['apply_id']}_{i:02d}")
         print(f"{i} 回目の再読み込み OK（通過から {elapsed} 秒）")
+        check(page, facility)
     notify(f"【ITS】{name}: {cfg['max_reloads']} 回の再読み込みでセッションは維持されました")
 
 

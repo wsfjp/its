@@ -18,3 +18,8 @@ max_reloads = 12
 name = "ブルーベリーヒル勝浦"
 # 「施設から探す」の各施設ページにある申込リンクの id（docs/site-research.md 参照）
 apply_id = 765
+# 対象の曜日（チェックイン日）。空なら全曜日
+weekdays = ["金", "土"]
+# 対象期間（チェックイン日、YYYY-MM-DD）。空なら制限なし
+date_from = ""
+date_to = ""
