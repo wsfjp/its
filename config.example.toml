@@ -7,7 +7,13 @@ cdp_url = ""
 profile_dir = "browser-profile"
 
 [watch]
-# Turnstile を通過する入口にする施設の申込 id（765 = ブルーベリーヒル勝浦）
+# カレンダー画面の開き方
+#   public: ITS ホームページの施設紹介「空き状況確認」タブから開く（Turnstile なし）
+#   apply : 申込画面に入り（Turnstile あり）「空き状況カレンダー」から開く
+entry = "public"
+# public のときに使う施設紹介ページ（どの施設のページでも全施設のカレンダーに行ける）
+public_url = "https://www.its-kenpo.or.jp/shisetsu/keiyaku/tsunen/katsuura/aki.html"
+# apply のときに入口にする施設の申込 id（765 = ブルーベリーヒル勝浦）
 entry_apply_id = 765
 # Turnstile 通過を待つ最大時間（秒）
 captcha_timeout_sec = 600

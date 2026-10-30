@@ -18,6 +18,7 @@ from .reserve import search_rooms, submit
 from .sitecodec import empty_apply_url
 
 CAPTURE_DIR = pathlib.Path("captures")
+DEFAULT_PUBLIC_URL = "https://www.its-kenpo.or.jp/shisetsu/keiyaku/tsunen/katsuura/aki.html"
 MIN_INTERVAL_SEC = 180
 MIN_REQUEST_WAIT_MS = 2000
 
@@ -48,7 +49,13 @@ def wait_for_human(page: Page, timeout_sec: int) -> bool:
 
 
 def open_calendar(page: Page, cfg: dict) -> Page | None:
-    """申込画面に入り（Turnstile は人が通過）、「空き状況カレンダー」を開く。"""
+    """「空き状況カレンダー」（全施設のタブがある画面）を開く。
+
+    entry = "public": ITS ホームページの施設紹介「空き状況確認」タブ（Turnstile なし）から開く。
+    entry = "apply" : 申込画面に入り（Turnstile は人が通過）、「空き状況カレンダー」リンクから開く。
+    """
+    if cfg.get("entry", "public") == "public":
+        return open_calendar_public(page, cfg.get("public_url", DEFAULT_PUBLIC_URL))
     page.goto(empty_apply_url(cfg["entry_apply_id"]))
     if is_captcha_page(page) and not wait_for_human(page, cfg["captcha_timeout_sec"]):
         notify("【ITS】Turnstile 待ちがタイムアウトしました")
@@ -58,6 +65,33 @@ def open_calendar(page: Page, cfg: dict) -> Page | None:
         page.click("#showStatus")
     cal = popup.value
     cal.wait_for_load_state("networkidle")
+    return cal
+
+
+def open_calendar_public(page: Page, url: str) -> Page | None:
+    """施設紹介ページに埋め込まれた予約システムの画面で「空き状況確認」を押す。"""
+    page.goto(url)
+    frame = page.frame_locator("#iframe_reserve")
+    button = frame.locator("input[value='空き状況確認'], button:has-text('空き状況確認')").first
+    button.wait_for(timeout=20000)
+    try:
+        with page.context.expect_page(timeout=15000) as popup:
+            button.click()
+        cal = popup.value
+    except Exception:
+        # 別窓ではなく埋め込み画面の中で開いた場合
+        frames = [f for f in page.frames if "empty_calendar" in f.url]
+        if not frames:
+            print("カレンダーが開きませんでした。config.toml の entry を \"apply\" にすると従来の入口を使います")
+            save_capture(page, "public_entry_failed")
+            return None
+        cal = page.context.new_page()
+        cal.goto(frames[0].url)
+    cal.wait_for_load_state("networkidle")
+    if cal.locator("#top_tabs").count() == 0:
+        print(f"カレンダー画面ではありません: {cal.url}")
+        save_capture(cal, "public_entry_failed")
+        return None
     return cal
 
 
