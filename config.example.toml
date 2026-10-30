@@ -19,8 +19,8 @@ entry_apply_id = 765
 captcha_timeout_sec = 600
 # 全施設の確認を繰り返す間隔（秒）。遮断を避けるため 180 未満は不可
 interval_sec = 300
-# 確認を繰り返す回数（1 なら 1 回だけ）
-max_rounds = 12
+# 確認する回数。繰り返すとカレンダーを開くたびに Turnstile が出ることがあるので、通常は 1
+max_rounds = 1
 # カレンダーの月を 1 つ読み込むごとの待ち時間（ミリ秒）。2000 未満は不可
 request_wait_ms = 3000
 
