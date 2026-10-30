@@ -1,6 +1,7 @@
 """LINE Messaging API での通知。"""
 import json
 import os
+import urllib.error
 import urllib.request
 
 PUSH_URL = "https://api.line.me/v2/bot/message/push"
@@ -9,12 +10,13 @@ PUSH_URL = "https://api.line.me/v2/bot/message/push"
 def load_dotenv(path: str = ".env") -> None:
     if not os.path.exists(path):
         return
-    with open(path, encoding="utf-8") as f:
+    # Windows のメモ帳で保存すると BOM が付くため utf-8-sig で読む
+    with open(path, encoding="utf-8-sig") as f:
         for line in f:
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
                 key, value = line.split("=", 1)
-                os.environ.setdefault(key.strip(), value.strip())
+                os.environ.setdefault(key.strip(), value.strip().strip("'\""))
 
 
 def notify(text: str) -> bool:
@@ -33,6 +35,8 @@ def notify(text: str) -> bool:
     try:
         with urllib.request.urlopen(req, timeout=10):
             return True
-    except Exception as e:  # 通知失敗で監視自体は止めない
+    except urllib.error.HTTPError as e:  # 通知失敗で監視自体は止めない
+        print(f"[notify] LINE 送信失敗: {e} {e.read().decode(errors='replace')}")
+    except Exception as e:
         print(f"[notify] LINE 送信失敗: {e}")
         return False

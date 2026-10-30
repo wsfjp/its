@@ -78,6 +78,8 @@ def main() -> int:
     ap.add_argument("--test-line", action="store_true", help="LINE 通知のテストだけ行う")
     args = ap.parse_args()
 
+    # Windows のコンソール（cp932）でも文字化けしないようにする
+    sys.stdout.reconfigure(encoding="utf-8")
     load_dotenv()
     if args.test_line:
         return 0 if notify("【ITS】LINE 通知のテストです") else 1
