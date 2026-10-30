@@ -16,22 +16,32 @@ ITS健保（関東ITソフトウェア健康保険組合）の保養施設につ
 
 ## セットアップ（自分の PC）
 
-Python 3.11 以上が必要です。
+Python 3.11 以上が必要です。Windows では `python3` ではなく `python`（または `py`）を使ってください。
 
 ```bash
-python3 -m venv .venv
+python -m venv .venv
 ```
+
+仮想環境の有効化（Mac / Linux）:
 
 ```bash
 source .venv/bin/activate
+```
+
+仮想環境の有効化（Windows の Git Bash）:
+
+```bash
+source .venv/Scripts/activate
 ```
 
 ```bash
 pip install -r requirements.txt
 ```
 
+`playwright` コマンドに PATH が通っていなくても動くよう、`python -m` 経由で実行します。
+
 ```bash
-playwright install chromium
+python -m playwright install chromium
 ```
 
 ```bash
