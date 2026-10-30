@@ -31,6 +31,16 @@ date_from = ""
 date_to = ""
 months_ahead = 2
 
+[reserve]
+# off     仮予約しない（空きの通知のみ）
+# dry_run 部屋を選ぶところまで行い「予約手続きに進む」の手前で止める（部屋は確保されない）
+# submit  メールアドレス送信まで行う（30 分で失効する仮予約になる。.env の ITS_EMAIL を使う）
+mode = "dry_run"
+# submit のとき、仮予約の直前にターミナルで y/N の確認をする
+confirm = true
+# 条件に合う枠のうち、優先順に何件まで試すか（埋まっていたら次へ）
+max_attempts = 3
+
 # 対象の施設。上にあるほど優先。名前はカレンダーのタブ表記と同じにする
 [[facilities]]
 name = "ブルーベリーヒル勝浦"

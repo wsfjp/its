@@ -11,8 +11,9 @@ import tomllib
 
 from playwright.sync_api import Page, sync_playwright
 
-from .calendar import search_all
+from .calendar import Vacancy, facility_ids, search_all
 from .line import load_dotenv, notify
+from .reserve import search_rooms, submit
 from .sitecodec import empty_apply_url
 
 CAPTURE_DIR = pathlib.Path("captures")
@@ -57,6 +58,39 @@ def open_calendar(page: Page, cfg: dict) -> Page | None:
     cal = popup.value
     cal.wait_for_load_state("networkidle")
     return cal
+
+
+def reserve(page: Page, cal: Page, found: list[Vacancy], config: dict) -> bool:
+    """優先順に仮予約を試みる。仮予約した（dry_run なら部屋を選べた）ら True。"""
+    mode = config["reserve"]["mode"]
+    search, watch_cfg = config["search"], config["watch"]
+    ids = facility_ids(cal)
+    for v in found[: config["reserve"]["max_attempts"]]:
+        print(f"仮予約を試みます（{mode}）: {v}")
+        page.goto(empty_apply_url(int(ids[v.facility])))
+        if is_captcha_page(page) and not wait_for_human(page, watch_cfg["captcha_timeout_sec"]):
+            notify("【ITS】Turnstile 待ちがタイムアウトしました")
+            return False
+        page.wait_for_load_state("networkidle")
+        room = search_rooms(page, v, search["nights"], search["persons"])
+        if room is None:
+            continue
+        desc = f"{v} 部屋{room['room']} {room['type']}（{room['persons']}名）"
+        if mode == "dry_run":
+            notify(f"【ITS】[dry_run] 部屋を選びました（仮予約はしていません）\n{desc}")
+            return True
+        if config["reserve"].get("confirm", True):
+            print("\a")
+            if input(f"{desc}\nこの部屋で仮予約しますか？ [y/N] ").strip().lower() != "y":
+                print("仮予約を中止しました")
+                return False
+        if submit(page):
+            notify(f"【ITS】仮予約しました。30 分以内にメールの URL から手続きしてください\n{desc}")
+            return True
+        notify(f"【ITS】仮予約に失敗しました\n{desc}")
+        save_capture(page, "reserve_failed")
+        return False
+    return False
 
 
 def main() -> int:
@@ -117,6 +151,9 @@ def main() -> int:
             if message and message != last_message:
                 notify(message)
             last_message = message
+            if found and config["reserve"]["mode"] != "off":
+                if reserve(page, cal, found, config):
+                    break
         page.close()
     return 0
 
