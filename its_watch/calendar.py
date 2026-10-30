@@ -3,8 +3,9 @@
 カレンダー画面は施設ごとのタブを持ち、月ごとの表をページ内の getMonthDays()
 で読み込む。Turnstile を通過したブラウザの中で、画面と同じ操作をして読み取る。
 
-カレンダーのセル（推定。実画面で要確認）:
+カレンダーのセル:
   td[data-join-time]  class が empty=空き / a_little=残りわずか / full=満室 / over=受付外
+受付前の月を要求すると、受付中の最終月の表が返る（その月は「翌月」ボタンが disabled）。
 """
 import datetime as dt
 from dataclasses import dataclass
@@ -35,22 +36,29 @@ def facility_ids(cal: Page) -> dict[str, str]:
     )
 
 
-def load_month(cal: Page, service_id: str, month: dt.date, nights: int, wait_ms: int) -> list[tuple[dt.date, str]]:
+def load_month(
+    cal: Page, service_id: str, month: dt.date, nights: int, wait_ms: int
+) -> tuple[list[tuple[dt.date, str]], bool]:
+    """1 か月分の (日付, 状態) と、翌月が受付中かどうかを返す。"""
     cal.evaluate(
         "([id, d, n]) => getMonthDays(id, d, n)",
         [service_id, month.strftime("%Y-%m-01"), nights],
     )
     cal.wait_for_timeout(wait_ms)
     cal.locator("#loadingView").wait_for(state="hidden")
-    cells = cal.locator(f"#tcb{service_id}_{nights} td[data-join-time]").evaluate_all(
+    body = cal.locator(f"#tcb{service_id}_{nights}")
+    has_next = body.locator("#nextMonth:not([disabled])").count() > 0
+    cells = body.locator("td[data-join-time]").evaluate_all(
         "tds => tds.map(td => [td.getAttribute('data-join-time'), td.className])"
     )
     result = []
     for join_time, classes in cells:
         status = next((c for c in classes.split() if c in STATUS_LABEL), None)
-        if status:
-            result.append((dt.date.fromisoformat(join_time[:10]), status))
-    return result
+        day = dt.date.fromisoformat(join_time[:10])
+        # 受付前の月を要求したときに返る別の月の表は無視する
+        if status and (day.year, day.month) == (month.year, month.month):
+            result.append((day, status))
+    return result, has_next
 
 
 def months_between(start: dt.date, end: dt.date) -> list[dt.date]:
@@ -83,8 +91,11 @@ def search_all(cal: Page, facilities: list[str], search: dict, wait_ms: int) -> 
             print(f"施設名がカレンダーにありません: {name}（候補: {', '.join(ids)}）")
             continue
         for month in months_between(start, end):
-            for day, status in load_month(cal, ids[name], month, search["nights"], wait_ms):
+            days, has_next = load_month(cal, ids[name], month, search["nights"], wait_ms)
+            for day, status in days:
                 if start <= day <= end and WEEKDAYS[day.weekday()] in weekdays:
                     found.append(Vacancy(name, day, status))
+            if not has_next:
+                break
     found.sort(key=lambda v: (facilities.index(v.facility), weekdays.index(WEEKDAYS[v.day.weekday()]), v.day))
     return found
