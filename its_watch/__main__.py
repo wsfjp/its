@@ -80,7 +80,12 @@ def main() -> int:
 
     with sync_playwright() as p:
         if browser_cfg.get("cdp_url"):
-            browser = p.chromium.connect_over_cdp(browser_cfg["cdp_url"])
+            try:
+                browser = p.chromium.connect_over_cdp(browser_cfg["cdp_url"])
+            except Exception:
+                print(f"Chrome に接続できません（{browser_cfg['cdp_url']}）。"
+                      "README の手順で --remote-debugging-port を付けて Chrome を起動してから実行してください")
+                return 1
             context = browser.contexts[0]
         else:
             context = p.chromium.launch_persistent_context(
