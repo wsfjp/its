@@ -70,13 +70,18 @@ def months_between(start: dt.date, end: dt.date) -> list[dt.date]:
 
 
 def search_period(search: dict) -> tuple[dt.date, dt.date]:
+    """対象期間。既定は今日から months_ahead か月先の月末まで。
+
+    カレンダーは当月・翌月・翌々月の 3 か月分が公開され、翌々月は空室公開日
+    （通常 27 日）までは空室なしで表示される。
+    """
     today = dt.date.today()
     start = dt.date.fromisoformat(search["date_from"]) if search.get("date_from") else today
     if search.get("date_to"):
         end = dt.date.fromisoformat(search["date_to"])
     else:
-        end = months_between(today, today + dt.timedelta(days=31 * search.get("months_ahead", 3)))[-1]
-        end = (end.replace(day=28) + dt.timedelta(days=4)).replace(day=1) - dt.timedelta(days=1)
+        months = today.month - 1 + search.get("months_ahead", 2) + 1
+        end = dt.date(today.year + months // 12, months % 12 + 1, 1) - dt.timedelta(days=1)
     return max(start, today), end
 
 
