@@ -87,6 +87,15 @@ python -m its_watch --test-line
 
 ## 実行
 
+Chrome の起動から空き検索（`mode` に応じて仮予約）までを、次の 1 コマンドで行います。
+前回の Chrome が残っていれば閉じてから起動し直します。実行後の Chrome は、続きを手作業で行えるよう開いたままにします。
+
+```bash
+./run.sh
+```
+
+Chrome を自分で起動してスクリプトだけ実行する場合は、次のとおりです。
+
 ```bash
 python -m its_watch
 ```
