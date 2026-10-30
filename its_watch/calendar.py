@@ -61,6 +61,10 @@ def load_month(
     return result, has_next
 
 
+def fmt_day(day: dt.date) -> str:
+    return f"{day:%m/%d}({WEEKDAYS[day.weekday()]})"
+
+
 def months_between(start: dt.date, end: dt.date) -> list[dt.date]:
     months, m = [], start.replace(day=1)
     while m <= end:
@@ -87,9 +91,13 @@ def search_period(search: dict) -> tuple[dt.date, dt.date]:
 
 def search_all(cal: Page, facilities: list[str], search: dict, wait_ms: int) -> list[Vacancy]:
     """条件に合う空きを、施設の優先順 → 曜日の優先順 → 日付の順で返す。"""
-    ids = facility_ids(cal)
     start, end = search_period(search)
     weekdays = search.get("weekdays") or list(WEEKDAYS)
+    days = [start + dt.timedelta(days=n) for n in range((end - start).days + 1)]
+    if not any(WEEKDAYS[d.weekday()] in weekdays for d in days):
+        print(f"注意: 対象期間 {fmt_day(start)}〜{fmt_day(end)} に、指定した曜日（{''.join(weekdays)}）の日がありません")
+        return []
+    ids = facility_ids(cal)
     found = []
     for name in facilities:
         if name not in ids:
