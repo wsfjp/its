@@ -82,16 +82,11 @@ python -m its_watch
 
 スクリプトが起動したブラウザではなく、普段使っている Chrome を別プロファイルで起動して接続できます。
 
-Mac の場合:
+開いている Chrome をすべて閉じてから、付属のスクリプトで起動します（Windows の Git Bash / Mac）。
+Chrome が出すログは捨てているので、ターミナルにエラーが流れ続けることはありません。
 
 ```bash
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222 --user-data-dir="$HOME/its-chrome"
-```
-
-Windows（PowerShell）の場合:
-
-```bash
-& "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="$env:USERPROFILE\its-chrome"
+./start-chrome.sh
 ```
 
 そのうえで `config.toml` の `cdp_url = "http://localhost:9222"` を設定して実行します。
