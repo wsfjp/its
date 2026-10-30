@@ -5,6 +5,7 @@ Turnstile は人が通過させ、それ以降の照会・通知を自動で行�
 import argparse
 import datetime as dt
 import pathlib
+import re
 import sys
 import time
 import tomllib
@@ -105,8 +106,20 @@ def main() -> int:
     if args.test_line:
         return 0 if notify("【ITS】LINE 通知のテストです") else 1
 
-    with open(args.config, "rb") as f:
-        config = tomllib.load(f)
+    try:
+        with open(args.config, "rb") as f:
+            config = tomllib.load(f)
+    except tomllib.TOMLDecodeError as e:
+        m = re.search(r"line (\d+)", str(e))
+        lines = pathlib.Path(args.config).read_text(encoding="utf-8").splitlines()
+        if m and int(m[1]) <= len(lines):
+            print(f"{args.config} の {m[1]} 行目の書き方が正しくありません: {lines[int(m[1]) - 1]}")
+        print("コメントは # で始める、= や \" は半角にする、1 行に設定は 1 つ、を確認してください")
+        print(f"（詳細: {e}）")
+        return 1
+    if "reserve" not in config:
+        print(f"{args.config} に [reserve] がありません。config.example.toml からコピーしてください")
+        return 1
     browser_cfg, watch_cfg, search = config["browser"], config["watch"], config["search"]
     facilities = [f["name"] for f in config["facilities"]]
     interval = max(watch_cfg["interval_sec"], MIN_INTERVAL_SEC)
