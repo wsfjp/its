@@ -4,4 +4,3 @@ captures/
 browser-profile/
 __pycache__/
 .venv/
-state.json

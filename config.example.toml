@@ -7,19 +7,32 @@ cdp_url = ""
 profile_dir = "browser-profile"
 
 [watch]
+# Turnstile を通過する入口にする施設の申込 id（765 = ブルーベリーヒル勝浦）
+entry_apply_id = 765
 # Turnstile 通過を待つ最大時間（秒）
 captcha_timeout_sec = 600
-# 通過後に再読み込みする間隔（秒）。遮断を避けるため 180 未満は不可
-reload_interval_sec = 300
-# 再読み込みの最大回数（0 なら 1 回取得して終了）
-max_reloads = 12
+# 全施設の確認を繰り返す間隔（秒）。遮断を避けるため 180 未満は不可
+interval_sec = 300
+# 確認を繰り返す回数（1 なら 1 回だけ）
+max_rounds = 12
+# カレンダーの月を 1 つ読み込むごとの待ち時間（ミリ秒）。2000 未満は不可
+request_wait_ms = 3000
 
-[[facilities]]
-name = "ブルーベリーヒル勝浦"
-# 「施設から探す」の各施設ページにある申込リンクの id（docs/site-research.md 参照）
-apply_id = 765
-# 対象の曜日（チェックイン日）。空なら全曜日
-weekdays = ["金", "土"]
-# 対象期間（チェックイン日、YYYY-MM-DD）。空なら制限なし
+[search]
+# 泊数（一泊のみ対応）
+nights = 1
+# 人数（仮予約の段階で使う）
+persons = 2
+# 対象の曜日（チェックイン日）。並び順が優先順。空なら全曜日
+weekdays = ["土", "金", "日"]
+# 対象期間（チェックイン日、YYYY-MM-DD）。空なら今日から months_ahead か月先の月末まで
 date_from = ""
 date_to = ""
+months_ahead = 3
+
+# 対象の施設。上にあるほど優先。名前はカレンダーのタブ表記と同じにする
+[[facilities]]
+name = "ブルーベリーヒル勝浦"
+
+[[facilities]]
+name = "トスラブ館山ルアーナ"

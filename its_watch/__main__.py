@@ -1,6 +1,6 @@
 """ITS健保 保養施設の空き照会（半自動）。
 
-Turnstile は人が通過させ、それ以降の照会・保存・通知を自動で行う。
+Turnstile は人が通過させ、それ以降の照会・通知を自動で行う。
 """
 import argparse
 import datetime as dt
@@ -11,12 +11,13 @@ import tomllib
 
 from playwright.sync_api import Page, sync_playwright
 
+from .calendar import search_all
 from .line import load_dotenv, notify
 from .sitecodec import empty_apply_url
-from .vacancy import fmt, new_matches
 
 CAPTURE_DIR = pathlib.Path("captures")
-MIN_RELOAD_SEC = 180
+MIN_INTERVAL_SEC = 180
+MIN_REQUEST_WAIT_MS = 2000
 
 
 def is_captcha_page(page: Page) -> bool:
@@ -32,10 +33,10 @@ def save_capture(page: Page, label: str) -> pathlib.Path:
     return stem
 
 
-def wait_for_human(page: Page, timeout_sec: int, facility: str) -> bool:
+def wait_for_human(page: Page, timeout_sec: int) -> bool:
     """Turnstile を人が通過して次の画面に進むまで待つ。"""
     print("\a")
-    notify(f"【ITS】{facility}: ブラウザで「確認」にチェックして「次へ」を押してください")
+    notify("【ITS】ブラウザで「確認」にチェックして「次へ」を押してください")
     deadline = time.monotonic() + timeout_sec
     while time.monotonic() < deadline:
         if not is_captcha_page(page):
@@ -44,42 +45,18 @@ def wait_for_human(page: Page, timeout_sec: int, facility: str) -> bool:
     return False
 
 
-def check(page: Page, facility: dict) -> None:
-    found, fresh = new_matches(page, facility)
-    print(f"{dt.datetime.now():%H:%M:%S} 条件に合う空き {len(found)} 日: {' '.join(map(fmt, found)) or 'なし'}")
-    if fresh:
-        url = empty_apply_url(facility["apply_id"])
-        notify(f"【ITS】{facility['name']} に空きが出ました\n{chr(10).join(map(fmt, fresh))}\n{url}")
-
-
-def watch(page: Page, facility: dict, cfg: dict) -> None:
-    name = facility["name"]
-    url = empty_apply_url(facility["apply_id"])
-    page.goto(url)
-
-    if is_captcha_page(page):
-        if not wait_for_human(page, cfg["captcha_timeout_sec"], name):
-            notify(f"【ITS】{name}: Turnstile 待ちがタイムアウトしました")
-            return
+def open_calendar(page: Page, cfg: dict) -> Page | None:
+    """申込画面に入り（Turnstile は人が通過）、「空き状況カレンダー」を開く。"""
+    page.goto(empty_apply_url(cfg["entry_apply_id"]))
+    if is_captcha_page(page) and not wait_for_human(page, cfg["captcha_timeout_sec"]):
+        notify("【ITS】Turnstile 待ちがタイムアウトしました")
+        return None
     page.wait_for_load_state("networkidle")
-    passed_at = time.monotonic()
-    save_capture(page, f"{facility['apply_id']}_00")
-    check(page, facility)
-
-    # 同じセッションでどれだけ再照会できるかを計測する
-    interval = max(cfg["reload_interval_sec"], MIN_RELOAD_SEC)
-    for i in range(1, cfg["max_reloads"] + 1):
-        page.wait_for_timeout(interval * 1000)
-        page.reload()
-        page.wait_for_load_state("networkidle")
-        elapsed = int(time.monotonic() - passed_at)
-        if is_captcha_page(page):
-            notify(f"【ITS】{name}: 通過から {elapsed} 秒後の {i} 回目の再読み込みで Turnstile に戻りました")
-            save_capture(page, f"{facility['apply_id']}_{i:02d}_captcha")
-            return
-        print(f"{i} 回目の再読み込み OK（通過から {elapsed} 秒）")
-        check(page, facility)
-    notify(f"【ITS】{name}: {cfg['max_reloads']} 回の再読み込みでセッションは維持されました")
+    with page.context.expect_page() as popup:
+        page.click("#showStatus")
+    cal = popup.value
+    cal.wait_for_load_state("networkidle")
+    return cal
 
 
 def main() -> int:
@@ -96,7 +73,10 @@ def main() -> int:
 
     with open(args.config, "rb") as f:
         config = tomllib.load(f)
-    browser_cfg, watch_cfg = config["browser"], config["watch"]
+    browser_cfg, watch_cfg, search = config["browser"], config["watch"], config["search"]
+    facilities = [f["name"] for f in config["facilities"]]
+    interval = max(watch_cfg["interval_sec"], MIN_INTERVAL_SEC)
+    wait_ms = max(watch_cfg["request_wait_ms"], MIN_REQUEST_WAIT_MS)
 
     with sync_playwright() as p:
         if browser_cfg.get("cdp_url"):
@@ -107,8 +87,31 @@ def main() -> int:
                 browser_cfg["profile_dir"], headless=False, locale="ja-JP"
             )
         page = context.new_page()
-        for facility in config["facilities"]:
-            watch(page, facility, watch_cfg)
+        cal = open_calendar(page, watch_cfg)
+        if cal is None:
+            return 1
+
+        last_message = None
+        for i in range(watch_cfg["max_rounds"]):
+            if i:
+                cal.wait_for_timeout(interval * 1000)
+                cal.reload()
+                cal.wait_for_load_state("networkidle")
+            if is_captcha_page(cal):
+                notify("【ITS】セッションが切れました。再実行して Turnstile を通過してください")
+                save_capture(cal, "calendar_captcha")
+                return 1
+            found = search_all(cal, facilities, search, wait_ms)
+            if i == 0:
+                save_capture(cal, "calendar")
+            print(f"{dt.datetime.now():%H:%M:%S} 条件に合う空き {len(found)} 件")
+            for v in found:
+                print(f"  {v}")
+            message = "【ITS】空き状況（○空き △残りわずか）\n" + "\n".join(map(str, found)) if found else None
+            # 前回と同じ内容は送らない（LINE の無料枠は月 200 通）
+            if message and message != last_message:
+                notify(message)
+            last_message = message
         page.close()
     return 0
 

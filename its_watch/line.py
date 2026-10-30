@@ -1,6 +1,7 @@
 """LINE Messaging API での通知。"""
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 
@@ -25,6 +26,11 @@ def notify(text: str) -> bool:
     token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
     to = os.environ.get("LINE_TO_USER_ID")
     if not token or not to:
+        return False
+    if not re.fullmatch(r"U[0-9a-f]{32}", to):
+        print(f"[notify] LINE_TO_USER_ID の形式が違います（{len(to)} 文字）。"
+              "LINE Developers の「チャネル基本設定」→「あなたのユーザーID」"
+              "（U で始まる 33 文字）を設定してください")
         return False
     body = json.dumps({"to": to, "messages": [{"type": "text", "text": text[:5000]}]})
     req = urllib.request.Request(
