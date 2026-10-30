@@ -1,0 +1,20 @@
+# config.toml にコピーして編集してください（config.toml は git 管理外）
+
+[browser]
+# 自分で起動した Chrome に接続する場合（README 参照）。空ならスクリプトが Chromium を起動する
+cdp_url = ""
+# スクリプトが起動する場合のプロファイル保存先
+profile_dir = "browser-profile"
+
+[watch]
+# Turnstile 通過を待つ最大時間（秒）
+captcha_timeout_sec = 600
+# 通過後に再読み込みする間隔（秒）。遮断を避けるため 180 未満は不可
+reload_interval_sec = 300
+# 再読み込みの最大回数（0 なら 1 回取得して終了）
+max_reloads = 12
+
+[[facilities]]
+name = "ブルーベリーヒル勝浦"
+# 「施設から探す」の各施設ページにある申込リンクの id（docs/site-research.md 参照）
+apply_id = 765

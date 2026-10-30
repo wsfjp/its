@@ -1,0 +1,6 @@
+.env
+config.toml
+captures/
+browser-profile/
+__pycache__/
+.venv/
