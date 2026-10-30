@@ -104,3 +104,23 @@ def search_all(cal: Page, facilities: list[str], search: dict, wait_ms: int) -> 
                 break
     found.sort(key=lambda v: (facilities.index(v.facility), weekdays.index(WEEKDAYS[v.day.weekday()]), v.day))
     return found
+
+
+def open_apply_page(cal: Page, service_id: str, day: dt.date, nights: int, wait_ms: int) -> Page:
+    """カレンダーで施設のタブと日付をクリックして申込画面を開く（人の操作と同じ遷移）。
+
+    申込画面の URL を直接開くと Turnstile が再び出るが、カレンダーから遷移すると
+    カレンダーを開いたときの通過が引き継がれる。
+    """
+    cal.click(f"#top_tabs a[onclick*=\"'as_{service_id}'\"]")
+    load_month(cal, service_id, day.replace(day=1), nights, wait_ms)
+    cell = cal.locator(f"#tcb{service_id}_{nights} td[data-join-time='{day.isoformat()}']")
+    try:
+        with cal.context.expect_page(timeout=15000) as popup:
+            cell.click()
+        page = popup.value
+    except Exception:
+        # 入口の施設は、申込画面（カレンダーを開いた元の画面）に日付を入れて窓を閉じる
+        page = cal.context.pages[-1]
+    page.wait_for_load_state("domcontentloaded")
+    return page

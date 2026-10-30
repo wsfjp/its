@@ -14,7 +14,7 @@ import urllib.request
 
 from playwright.sync_api import Page, sync_playwright
 
-from .calendar import Vacancy, facility_ids, search_all
+from .calendar import Vacancy, facility_ids, open_apply_page, search_all
 from .line import load_dotenv, notify
 from .reserve import search_rooms, submit
 from .sitecodec import empty_apply_url
@@ -147,14 +147,18 @@ def reserve(chrome: Chrome, ids: dict[str, str], found: list[Vacancy], config: d
     """優先順に仮予約を試みる。仮予約した（dry_run なら部屋を選べた）ら True。"""
     mode = config["reserve"]["mode"]
     search, watch_cfg = config["search"], config["watch"]
+    wait_ms = max(watch_cfg["request_wait_ms"], MIN_REQUEST_WAIT_MS)
     # 前の回の申込画面が残っていると、Turnstile 通過の判定を誤るので閉じておく
     for pg in chrome.context.pages:
         if "/apply/empty_new" in pg.url or "/apply/capture_check" in pg.url:
             pg.close()
-    page = chrome.context.new_page()
     for v in found[: config["reserve"]["max_attempts"]]:
         print(f"仮予約を試みます（{mode}）: {v}")
-        page.goto(empty_apply_url(int(ids[v.facility])))
+        # 日付をクリックするとカレンダーの窓は閉じるので、無ければ開き直す
+        cal = chrome.find_page("/apply/calendar") or open_calendar(chrome, watch_cfg)
+        if cal is None:
+            return False
+        page = open_apply_page(cal, ids[v.facility], v.day, search["nights"], wait_ms)
         if is_captcha_page(page):
             if not chrome.pass_turnstile(watch_cfg["captcha_timeout_sec"], "/apply/empty_new"):
                 notify("【ITS】Turnstile 待ちがタイムアウトしました")
